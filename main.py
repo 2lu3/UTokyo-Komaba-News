@@ -1,7 +1,21 @@
+import os
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
+def create_message(notification):
+    return '新しいお知らせです!\n' + notification[0] + '\n' + notification[1]
+def post_to_line(message):
+    ACCESS_TOKEN = os.environ["LINE_ACCESS_TOKEN"]
+    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
+    data = {
+            "message": message
+            }
+    requests.post(
+            "https://notify-api.line.me/api/notify",
+            headers=headers,
+            data=data
+            )
 
 utokyo_notification_url = 'https://www.c.u-tokyo.ac.jp/zenki/news/kyoumu/index.html'
 # 指定されたURLのHTMLをダウンロードして､BeautifulSoup オブジェクトを生成する
@@ -30,10 +44,9 @@ def main():
     soup = create_soup()
     notification_list = parse_into_notification_list(soup)
     for notification in notification_list:
-        print(notification[0])
-        print(notification[1])
-        print('')
-
+        message = create_message(notification)
+        post_to_line(message)
+        exit()
 
 if __name__ == '__main__':
     main()
