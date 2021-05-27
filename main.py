@@ -2,14 +2,45 @@ import os
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
+from dotenv import load_dotenv
+import psycopg2
 
-def create_message(notification):
-    return '新しいお知らせです!\n' + notification[0] + '\n' + notification[1]
-def post_to_line(message):
+# データベースを操作するクラス
+class SQLDataBase:
+    def __init__(self):
+        self.dsn = os.environ["POSTGRES_URI"]
+        self.table_name = "notifications"
+        self.conn = None
+
+    # データベースへ接続する関数
+    # with ブロックで囲むため､あえてselfの変数に格納せず､return するようにしている
+    def connect(self):
+        return psycopg2.connect(self.dsn)
+
+    # 前回お知らせしたタイトルをデータベースから読み出す
+    def find_latest_notification(self):
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                cur.execute(f'SELECT * FROM {self.table_name}')
+                rows = cur.fetchall()
+                print('前回お知らせした内容:',rows[-1][0])
+                return rows[-1][0]
+
+    # 今回お知らせしたタイトルをデータベースに保存する
+    def update_latest_notification(self, notification_title):
+        with self.connect() as conn:
+            with conn.cursor() as cur:
+                # 一度データベースを削除
+                cur.execute(f'DELETE FROM {self.table_name}')
+                # データを保存
+                cur.execute(f'INSERT INTO {self.table_name} VALUES (\'{notification_title}\')')
+
+
+def post_to_line(title, url):
     ACCESS_TOKEN = os.environ["LINE_ACCESS_TOKEN"]
     headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
     data = {
-            "message": message
+            "message": '新しいお知らせです!\n' + title + '\n' + url
             }
     requests.post(
             "https://notify-api.line.me/api/notify",
@@ -41,12 +72,26 @@ def parse_into_notification_list(soup):
 
 
 def main():
+    load_dotenv()
+
+    db = SQLDataBase()
+    latest_notification_title = db.find_latest_notification()
+
     soup = create_soup()
     notification_list = parse_into_notification_list(soup)
+
+    db.update_latest_notification(notification_list[0][0])
     for notification in notification_list:
-        message = create_message(notification)
-        post_to_line(message)
-        exit()
+        title = notification[0]
+        url = notification[1]
+
+        # 前回お知らせしたタイトルと同じ場合
+        if title == latest_notification_title:
+            print('これより前のお知らせは､前回お伝えしたものです')
+            break
+
+        post_to_line(title, url)
+        print('posted', title, notification)
 
 if __name__ == '__main__':
     main()
