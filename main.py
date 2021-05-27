@@ -8,7 +8,7 @@ import psycopg2
 # データベースを操作するクラス
 class SQLDataBase:
     def __init__(self):
-        self.dsn = os.environ["POSTGRES_URI"]
+        self.dsn = os.environ["DATABASE_URL"]
         self.table_name = "notifications"
         self.conn = None
 
