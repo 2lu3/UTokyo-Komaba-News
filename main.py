@@ -3,70 +3,87 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from dotenv import load_dotenv
-import psycopg2
+import firebase_admin
+from firebase_admin import firestore
+from datetime import datetime
+from typing import Optional
+import time
 
-# データベースを操作するクラス
-class SQLDataBase:
+
+class FireBaseManager:
     def __init__(self):
-        self.dsn = os.environ["DATABASE_URL"]
-        self.table_name = "notifications"
-        self.conn = None
+        load_dotenv(verbose=False)
+        firebase_admin.initialize_app()
+        self.db = firestore.client()
+        self.notification_ref = self.db.collection(u'notification')
 
-    # データベースへ接続する関数
-    # with ブロックで囲むため､あえてselfの変数に格納せず､return するようにしている
-    def connect(self):
-        return psycopg2.connect(self.dsn)
+    def delete_oldest_notifications(self, number=1):
+        # query = self.notification_ref.order_by(
+        # 'timestamp', direction = firestore.Query.DESCENDING).limit(number)
+        query = self.notification_ref.order_by(
+            'timestamp').limit_to_last(number)
+        docs = query.get()
+        for doc in docs:
+            print(doc.to_dict()["title"])
+            doc.reference.delete()
 
-    # 前回お知らせしたタイトルをデータベースから読み出す
-    def find_latest_notification(self):
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                cur.execute(f'SELECT * FROM {self.table_name}')
-                rows = cur.fetchall()
-                print('前回お知らせした内容:',rows[-1][0])
-                return rows[-1][0]
+    def delete_all(self):
+        docs = self.notification_ref.stream()
 
-    # 今回お知らせしたタイトルをデータベースに保存する
-    def update_latest_notification(self, notification_title):
-        with self.connect() as conn:
-            with conn.cursor() as cur:
-                # 一度データベースを削除
-                cur.execute(f'DELETE FROM {self.table_name}')
-                # データを保存
-                cur.execute(f'INSERT INTO {self.table_name} VALUES (\'{notification_title}\')')
+        for doc in docs:
+            doc.reference.delete()
+
+    def add_notification(self, title: str):
+        self.notification_ref.add({
+            u"title": title,
+            u"timestamp": firestore.SERVER_TIMESTAMP
+        })
+
+    def get_titles(self):
+        title_list = []
+        for notification in self.notification_ref.stream():
+            title_list.append(notification.to_dict()["title"])
+        return title_list
 
 
-def post_to_line(title, url):
-    ACCESS_TOKEN = os.environ["LINE_ACCESS_TOKEN"]
-    headers = {"Authorization": f"Bearer {ACCESS_TOKEN}"}
+def send2line(title, url):
+    load_dotenv()
+    LINE_ACCESS_TOKEN = os.environ["LINE_ACCESS_TOKEN"]
+    headers = {"Authorization": f"Bearer {LINE_ACCESS_TOKEN}"}
     data = {
-            "message": '新しいお知らせです!\n' + title + '\n' + url
-            }
+        "message": '新しいお知らせです!\n' + title + '\n' + url
+    }
     requests.post(
-            "https://notify-api.line.me/api/notify",
-            headers=headers,
-            data=data
-            )
+        "https://notify-api.line.me/api/notify",
+        headers=headers,
+        data=data
+    )
 
-utokyo_notification_url = 'https://www.c.u-tokyo.ac.jp/zenki/news/kyoumu/index.html'
-# 指定されたURLのHTMLをダウンロードして､BeautifulSoup オブジェクトを生成する
-def create_soup():
+
+def get_notification_title_list():
+    utokyo_notification_url = 'http://www.c.u-tokyo.ac.jp/zenki/news/kyoumu/index.html'
+
+    # 指定されたURLのHTMLをダウンロードして､BeautifulSoup オブジェクトを生成する
     res = requests.get(utokyo_notification_url)
-    return BeautifulSoup(res.text, 'html.parser')
+    soup = BeautifulSoup(res.text, 'html.parser')
 
-# soupオブジェクトを受け取り､お知らせのリストを返す
-def parse_into_notification_list(soup):
+    print(soup)
     definition_lists = soup.select('#newslist2 > dl')
     # 2021/05/27 時点では､'#newslist2 > dl'は1つ
+    print(definition_lists)
     if len(definition_lists) != 1:
         return None
 
     definition_list = definition_lists[0]
+
+    # 通知のsoupオブジェクト
     soup_notification_list = definition_list.find_all('a')
+
     notification_list = []
     for soup_notification in soup_notification_list:
         text = soup_notification.text
-        url = urljoin(utokyo_notification_url, soup_notification.get('href'))
+        url = urljoin(utokyo_notification_url,
+                      soup_notification.get('href'))
         notification_list.append([text, url])
     return notification_list
 
@@ -74,26 +91,45 @@ def parse_into_notification_list(soup):
 def main():
     load_dotenv()
 
-    db = SQLDataBase()
-    latest_notification_title = db.find_latest_notification()
+    firebase = FireBaseManager()
+    # firebase.delete_all()
 
-    soup = create_soup()
-    notification_list = parse_into_notification_list(soup)
+    # [[title, url], [title, url], [title url]]
+    homepage_notification_list = get_notification_title_list()
+    assert homepage_notification_list is not None
 
-    db.update_latest_notification(notification_list[0][0])
-    for notification in notification_list:
-        title = notification[0]
-        url = notification[1]
+    print('homepage notifications')
+    print(homepage_notification_list)
 
-        # 前回お知らせしたタイトルと同じ場合
-        if title == latest_notification_title:
-            print('これより前のお知らせは､前回お伝えしたものです')
+    # [title, title, title]
+    database_notifications = firebase.get_titles()
+    print('database titles')
+    print(database_notifications)
+
+    # まだ通知されていないリスト
+    un_notified_list = []
+    for new_title, new_url in homepage_notification_list:
+        if not new_title in database_notifications:
+            un_notified_list.append([new_title, new_url])
+        else:
+            # 以前通知したメッセージが見つかった時点で、探索を終わる
             break
 
-        post_to_line(title, url)
-        print('posted', title, notification)
+    # 古い順に通知を送る
+    un_notified_list = un_notified_list[::-1]
+    for title, url in un_notified_list:
+        print(f'sending {title}')
+        send2line(title, url)
+        firebase.add_notification(title)
+        time.sleep(1)
+
+    print('title num', len(firebase.get_titles()))
+    delete_news_num = len(firebase.get_titles()) - 500
+    print('delete num', delete_news_num)
+
+    if delete_news_num > 0:
+        firebase.delete_oldest_notifications(delete_news_num)
+
 
 if __name__ == '__main__':
     main()
-
-
