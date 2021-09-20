@@ -16,10 +16,10 @@ class FireBaseManager:
         firebase_admin.initialize_app()
         self.db = firestore.client()
         self.notification_ref = self.db.collection(u'notification')
+        self.titles = []
+        self.read_titles()
 
     def delete_oldest_notifications(self, number=1):
-        # query = self.notification_ref.order_by(
-        # 'timestamp', direction = firestore.Query.DESCENDING).limit(number)
         query = self.notification_ref.order_by(
             'timestamp').limit_to_last(number)
         docs = query.get()
@@ -39,12 +39,13 @@ class FireBaseManager:
             u"timestamp": firestore.SERVER_TIMESTAMP
         })
 
-    def get_titles(self):
-        title_list = []
+    def read_titles(self):
+        self.titles = []
         for notification in self.notification_ref.stream():
-            title_list.append(notification.to_dict()["title"])
-        return title_list
+            self.titles.append(notification.to_dict()["title"])
 
+    def get_titles(self):
+        return self.titles
 
 def send2line(title, url):
     load_dotenv()
@@ -67,11 +68,13 @@ def get_notification_title_list():
     res = requests.get(utokyo_notification_url)
     soup = BeautifulSoup(res.text, 'html.parser')
 
-    print(soup)
     definition_lists = soup.select('#newslist2 > dl')
     # 2021/05/27 時点では､'#newslist2 > dl'は1つ
-    print(definition_lists)
+    print('definition_lists num ', len(definition_lists))
     if len(definition_lists) != 1:
+        print("error definition_lists != 1")
+        print(soup)
+        print(definition_list)
         return None
 
     definition_list = definition_lists[0]
@@ -89,7 +92,7 @@ def get_notification_title_list():
 
 
 def main():
-    print("utokyo notify app start")
+    print("utokyo notify app start", datetime.now())
     load_dotenv()
 
     firebase = FireBaseManager()
@@ -98,13 +101,8 @@ def main():
     homepage_notification_list = get_notification_title_list()
     assert homepage_notification_list is not None
 
-    print('homepage notifications')
-    print(homepage_notification_list)
-
     # [title, title, title]
     database_notifications = firebase.get_titles()
-    print('database titles')
-    print(database_notifications)
 
     # まだ通知されていないリスト
     un_notified_list = []
@@ -124,7 +122,7 @@ def main():
         time.sleep(1)
 
     print('title num', len(firebase.get_titles()))
-    delete_news_num = len(firebase.get_titles()) - 500
+    delete_news_num = len(firebase.get_titles()) - 50
     print('delete num', delete_news_num)
 
     if delete_news_num > 0:
