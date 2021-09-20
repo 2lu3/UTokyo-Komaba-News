@@ -89,10 +89,10 @@ def get_notification_title_list():
 
 
 def main():
+    print("utokyo notify app start")
     load_dotenv()
 
     firebase = FireBaseManager()
-    # firebase.delete_all()
 
     # [[title, url], [title, url], [title url]]
     homepage_notification_list = get_notification_title_list()
