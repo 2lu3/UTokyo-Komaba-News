@@ -122,7 +122,7 @@ def main():
         time.sleep(1)
 
     print('title num', len(firebase.get_titles()))
-    delete_news_num = len(firebase.get_titles()) - 50
+    delete_news_num = len(firebase.get_titles()) - 10
     print('delete num', delete_news_num)
 
     if delete_news_num > 0:
