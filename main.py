@@ -22,8 +22,6 @@ def save_all_titles(titles):
             f.write('\n')
 
 def send2line(title, url):
-    print(url)
-    return
     load_dotenv()
     LINE_ACCESS_TOKEN = os.environ["LINE_ACCESS_TOKEN"]
     headers = {"Authorization": f"Bearer {LINE_ACCESS_TOKEN}"}
@@ -91,8 +89,8 @@ def main():
 
     # まだ通知されていないリスト
     un_notified_list = []
-    print('un_notified_list')
     print('\n\n\n')
+    print('un_notified_list')
     for new_title, new_url in zip(homepage_title_list, homepage_url_list):
         if not new_title in saved_notifications:
             print(new_title)
