@@ -9,7 +9,7 @@ from datetime import datetime
 from typing import Optional
 import time
 
-log_file_name = "title_log"
+log_file_name = "/home/tlaloc/log/titles.log"
 def read_all_titles():
     if not os.path.exists(log_file_name):
         print('log file not found')
@@ -24,7 +24,6 @@ def save_all_titles(titles):
             f.write('\n')
 
 def send2line(title, url):
-    print(title, url)
     load_dotenv()
     LINE_ACCESS_TOKEN = os.environ["LINE_ACCESS_TOKEN"]
     headers = {"Authorization": f"Bearer {LINE_ACCESS_TOKEN}"}
@@ -104,15 +103,16 @@ def main():
 
     # 古い順に通知を送る
     un_notified_list = un_notified_list[::-1]
+
+    print('\n\n\n')
     if len(un_notified_list) > 5:
         send2line(str(len(un_notified_list)) + '件の通知が送信されようとしています', '@武藤ひかる エラーか確認してください')
         return
-
-
-    for title, url in un_notified_list:
-        print(f'sending {title}')
-        send2line(title, url)
-        time.sleep(1)
+    else:
+        for title, url in un_notified_list:
+            print(f'sending {title}')
+            send2line(title, url)
+            time.sleep(3)
 
 
 
