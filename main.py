@@ -3,13 +3,11 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from dotenv import load_dotenv
-import firebase_admin
-from firebase_admin import firestore
 from datetime import datetime
-from typing import Optional
 import time
 
-log_file_name = "/home/tlaloc/log/titles.log"
+#log_file_name = "/home/tlaloc/log/titles.log"
+log_file_name = "./titles.log"
 def read_all_titles():
     if not os.path.exists(log_file_name):
         print('log file not found')
@@ -24,6 +22,8 @@ def save_all_titles(titles):
             f.write('\n')
 
 def send2line(title, url):
+    print(url)
+    return
     load_dotenv()
     LINE_ACCESS_TOKEN = os.environ["LINE_ACCESS_TOKEN"]
     headers = {"Authorization": f"Bearer {LINE_ACCESS_TOKEN}"}
@@ -119,40 +119,3 @@ def main():
 
 if __name__ == '__main__':
     main()
-
-class FireBaseManager:
-    def __init__(self):
-        load_dotenv(verbose=False)
-        firebase_admin.initialize_app()
-        self.db = firestore.client()
-        self.notification_ref = self.db.collection(u'notification')
-        self.titles = []
-        self.read_titles()
-
-    def delete_oldest_notifications(self, number=1):
-        query = self.notification_ref.order_by(
-            'timestamp').limit_to_last(number)
-        docs = query.get()
-        for doc in docs:
-            print(doc.to_dict()["title"])
-            doc.reference.delete()
-
-    def delete_all(self):
-        docs = self.notification_ref.stream()
-
-        for doc in docs:
-            doc.reference.delete()
-
-    def add_notification(self, title: str):
-        self.notification_ref.add({
-            u"title": title,
-            u"timestamp": firestore.SERVER_TIMESTAMP
-        })
-
-    def read_titles(self):
-        self.titles = []
-        for notification in self.notification_ref.stream():
-            self.titles.append(notification.to_dict()["title"])
-
-    def get_titles(self):
-        return self.titles
