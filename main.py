@@ -26,7 +26,7 @@ def send2line(title, url):
     LINE_ACCESS_TOKEN = os.environ["LINE_ACCESS_TOKEN"]
     headers = {"Authorization": f"Bearer {LINE_ACCESS_TOKEN}"}
     data = {
-        "message": '新しいお知らせです!\n' + title + '\n' + url
+        "message": title + '\n' + url
     }
     requests.post(
         "https://notify-api.line.me/api/notify",
